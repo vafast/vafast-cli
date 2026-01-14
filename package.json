@@ -1,6 +1,6 @@
 {
   "name": "@vafast/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vafast CLI - 类型同步和开发工具",
   "type": "module",
   "bin": {
@@ -20,8 +20,8 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest",
-    "prepublishOnly": "npm run build"
+    "test": "vitest run",
+    "release": "npm run build && npm run test && npx bumpp && npm publish --access=public"
   },
   "keywords": [
     "vafast",
@@ -39,7 +39,7 @@
     "@types/node": "^22.0.0",
     "tsdown": "^0.2.0",
     "typescript": "^5.4.5",
-    "vafast": "file:../vafast",
+    "vafast": "^0.5.1",
     "vitest": "^2.0.0"
   }
 }
