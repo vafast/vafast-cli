@@ -103,13 +103,13 @@ const routeDefinitions = [
 // 转换为运行时路由
 const routes = defineRoutes(routeDefinitions)
 
-// 添加契约接口
+// 添加契约接口（使用无参调用，自动从全局 Registry 获取）
 const allRoutes = [
   ...routes,
   {
     method: 'GET' as const,
     path: '/__contract__',
-    handler: () => getContract(routeDefinitions),
+    handler: getContract,  // 直接作为 handler，最简洁
   }
 ]
 
