@@ -2,7 +2,7 @@
  * 使用真正的 vafast 框架进行完整测试
  */
 
-import { Server, defineRoute, defineRoutes, Type, serve, createContractHandler } from 'vafast'
+import { Server, defineRoute, defineRoutes, Type, serve, getContract } from 'vafast'
 
 // 定义路由
 const routeDefinitions = [
@@ -109,7 +109,7 @@ const allRoutes = [
   {
     method: 'GET' as const,
     path: '/__contract__',
-    handler: createContractHandler(routeDefinitions),
+    handler: () => getContract(routeDefinitions),
   }
 ]
 
