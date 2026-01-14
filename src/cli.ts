@@ -15,7 +15,7 @@ cli
   .command('sync', '从服务端同步 API 类型定义')
   .option('--url <url>', '服务端地址（必填）')
   .option('--out <path>', '输出文件路径', { default: 'src/api.generated.ts' })
-  .option('--endpoint <path>', '契约接口路径', { default: '/__contract__' })
+  .option('--endpoint <path>', 'API Spec 接口路径', { default: '/api-spec' })
   .action(async (options) => {
     if (!options.url) {
       console.error('❌ 请指定服务端地址：--url <url>')

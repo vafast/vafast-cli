@@ -2,7 +2,7 @@
  * 使用真正的 vafast 框架进行完整测试
  */
 
-import { Server, defineRoute, defineRoutes, Type, serve, getContract } from 'vafast'
+import { Server, defineRoute, defineRoutes, Type, serve, getApiSpec } from 'vafast'
 
 // 定义路由
 const routeDefinitions = [
@@ -103,13 +103,13 @@ const routeDefinitions = [
 // 转换为运行时路由
 const routes = defineRoutes(routeDefinitions)
 
-// 添加契约接口（使用无参调用，自动从全局 Registry 获取）
+// 添加 API Spec 接口（使用无参调用，自动从全局 Registry 获取）
 const allRoutes = [
   ...routes,
   {
     method: 'GET' as const,
-    path: '/__contract__',
-    handler: getContract,  // 直接作为 handler，最简洁
+    path: '/api-spec',
+    handler: getApiSpec,  // 直接作为 handler，最简洁
   }
 ]
 
@@ -119,5 +119,5 @@ const server = new Server(allRoutes)
 // 启动
 serve({ fetch: server.fetch, port: 3456 }, () => {
   console.log('🚀 Vafast test server running on http://localhost:3456')
-  console.log('📄 Contract: http://localhost:3456/__contract__')
+  console.log('📄 API Spec: http://localhost:3456/api-spec')
 })
