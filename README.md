@@ -32,6 +32,18 @@ npx vafast sync --url http://localhost:3000 --endpoint /api/contract
 | `--url <url>` | 服务端地址（必填） | - |
 | `--out <path>` | 输出文件路径 | `src/api.generated.ts` |
 | `--endpoint <path>` | 契约接口路径 | `/__contract__` |
+| `--strip-prefix <prefix>` | 去掉路径前缀 | - |
+
+**示例：**
+
+```bash
+# 去掉 /restfulApi 前缀
+npx vafast sync \
+  --url http://localhost:9002 \
+  --endpoint /restfulApi/api-spec \
+  --out src/types/api/ones.generated.ts \
+  --strip-prefix /restfulApi
+```
 
 ## 工作流程
 
@@ -66,13 +78,23 @@ npx vafast sync --url http://localhost:3000
 ### 3. 使用生成的类型
 
 ```typescript
-import { eden } from '@vafast/api-client'
-import type { Api } from './api.generated'
+import { createClient } from '@vafast/api-client'
+import { createApiClient } from './api.generated'
 
-const api = eden<Api>('http://localhost:3000')
+// 创建底层客户端
+const client = createClient({
+  baseURL: 'http://localhost:3000',
+  timeout: 30000
+})
 
-// 类型安全的调用
+// 创建类型安全的 API 客户端
+const api = createApiClient(client)
+
+// 类型安全的调用（错误路径会被 TypeScript 检测）
 const { data, error } = await api.users.get({ page: 1 })
+
+// ❌ TypeScript 会报错
+// api.nonExistent.get()  // Error: Property 'nonExistent' does not exist
 ```
 
 ## 自动化
@@ -82,9 +104,12 @@ const { data, error } = await api.users.get({ page: 1 })
 ```json
 {
   "scripts": {
-    "sync": "vafast sync --url $API_URL",
-    "dev": "npm run sync && vite",
-    "build": "npm run sync && vite build"
+    "sync:auth": "vafast sync --url http://localhost:9003 --endpoint /authRestfulApi/api-spec --out src/types/api/auth.generated.ts --strip-prefix /authRestfulApi",
+    "sync:ones": "vafast sync --url http://localhost:9002 --endpoint /restfulApi/api-spec --out src/types/api/ones.generated.ts --strip-prefix /restfulApi",
+    "sync:billing": "vafast sync --url http://localhost:9004 --endpoint /billingRestfulApi/api-spec --out src/types/api/billing.generated.ts --strip-prefix /billingRestfulApi",
+    "sync:types": "npm run sync:auth && npm run sync:billing && npm run sync:ones",
+    "dev": "vite",
+    "build": "npm run sync:types && vite build"
   }
 }
 ```
@@ -113,27 +138,56 @@ const { data, error } = await api.users.get({ page: 1 })
 生成的类型：
 
 ```typescript
+import type { ApiResponse, RequestConfig, Client, EdenClient } from '@vafast/api-client'
+import { eden } from '@vafast/api-client'
+
+/** API 契约类型 */
 export type Api = {
   users: {
     get: {
       query: { page?: number }
-      return: unknown
+      return: any
     }
     post: {
       body: { name?: string }
-      return: unknown
+      return: any
     }
   }
 }
+
+/** API 客户端类型别名 */
+export type ApiClientType = EdenClient<Api>
+
+/**
+ * 创建类型安全的 API 客户端
+ */
+export function createApiClient(client: Client): EdenClient<Api> {
+  return eden<Api>(client)
+}
+```
+
+**使用方式：**
+
+```typescript
+import { createClient } from '@vafast/api-client'
+import { createApiClient } from './api.generated'
+
+const client = createClient({ baseURL: '/api', timeout: 30000 })
+const api = createApiClient(client)
+
+// 完整的类型安全
+const { data, error } = await api.users.post({ name: 'John' })
 ```
 
 ## 注意事项
 
-1. **返回类型**：当前契约不包含返回类型信息，生成的类型中返回值为 `unknown`。如需完整类型推断，建议使用 monorepo 共享路由定义。
+1. **返回类型**：如果后端未定义 `response` schema，生成的返回类型为 `any`（渐进式类型安全）。建议后端添加 `response` schema 获得完整类型检查。
 
 2. **服务器必须运行**：执行 `sync` 命令时，服务端必须在运行并暴露契约接口。
 
 3. **不要手动修改**：生成的文件会被覆盖，请勿手动修改。
+
+4. **类型安全**：生成的 `createApiClient` 返回 `EdenClient<Api>`，TypeScript 会检测错误的 API 路径。
 
 ## License
 
