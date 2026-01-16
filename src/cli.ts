@@ -16,6 +16,7 @@ cli
   .option('--url <url>', '服务端地址（必填）')
   .option('--out <path>', '输出文件路径', { default: 'src/api.generated.ts' })
   .option('--endpoint <path>', 'API Spec 接口路径', { default: '/api-spec' })
+  .option('--strip-prefix <prefix>', '从路径中去掉的前缀（如 /billingRestfulApi）')
   .action(async (options) => {
     if (!options.url) {
       console.error('❌ 请指定服务端地址：--url <url>')
@@ -26,6 +27,7 @@ cli
       url: options.url,
       output: options.out,
       endpoint: options.endpoint,
+      stripPrefix: options.stripPrefix,
     })
   })
 

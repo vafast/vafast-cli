@@ -12,6 +12,7 @@ interface SyncOptions {
   url: string
   output: string
   endpoint: string
+  stripPrefix?: string
 }
 
 interface RouteContract {
@@ -23,6 +24,7 @@ interface RouteContract {
     body?: unknown
     query?: unknown
     params?: unknown
+    response?: unknown
   }
 }
 
@@ -36,7 +38,7 @@ interface ApiContract {
  * 同步 API 类型
  */
 export async function syncTypes(options: SyncOptions): Promise<void> {
-  const { url, output, endpoint } = options
+  const { url, output, endpoint, stripPrefix } = options
   
   console.log(`🔄 正在从 ${url}${endpoint} 获取契约...`)
   
@@ -58,8 +60,12 @@ export async function syncTypes(options: SyncOptions): Promise<void> {
   
   console.log(`✅ 获取到 ${contract.routes.length} 个路由`)
   
+  if (stripPrefix) {
+    console.log(`🔧 去掉路径前缀: ${stripPrefix}`)
+  }
+  
   // 2. 生成类型定义
-  const typeContent = generateTypeDefinition(contract)
+  const typeContent = generateTypeDefinition(contract, stripPrefix)
   
   // 3. 写入文件
   const outputDir = dirname(output)
@@ -77,7 +83,7 @@ export async function syncTypes(options: SyncOptions): Promise<void> {
 /**
  * 生成类型定义文件内容
  */
-function generateTypeDefinition(contract: ApiContract): string {
+function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): string {
   const lines: string[] = []
   
   // 文件头
@@ -90,16 +96,115 @@ function generateTypeDefinition(contract: ApiContract): string {
   lines.push(' */')
   lines.push('')
   
-  // 构建路由树
-  const routeTree = buildRouteTree(contract.routes)
+  // 导入类型
+  lines.push('import type { ApiResponse, RequestConfig, Client } from \'@vafast/api-client\'')
+  lines.push('import { eden } from \'@vafast/api-client\'')
+  lines.push('')
   
-  // 生成类型
+  // 构建路由树
+  const routeTree = buildRouteTree(contract.routes, stripPrefix)
+  
+  // 生成契约类型（给 eden 内部用）
+  lines.push('/** API 契约类型 */')
   lines.push('export type Api = {')
   lines.push(generateRouteTreeType(routeTree, 1))
   lines.push('}')
   lines.push('')
   
+  // 生成客户端接口类型（给 IDE 提示用）
+  lines.push('/** API 客户端类型（提供完整的 IDE 智能提示） */')
+  lines.push('export interface ApiClient {')
+  lines.push(generateClientType(routeTree, 1))
+  lines.push('}')
+  lines.push('')
+  
+  // 生成工厂函数
+  lines.push('/**')
+  lines.push(' * 创建类型安全的 API 客户端')
+  lines.push(' * ')
+  lines.push(' * @example')
+  lines.push(' * ```typescript')
+  lines.push(' * import { createClient } from \'@vafast/api-client\'')
+  lines.push(' * import { createApiClient } from \'./api.generated\'')
+  lines.push(' * ')
+  lines.push(' * const client = createClient(\'/api\').use(authMiddleware)')
+  lines.push(' * const api = createApiClient(client)')
+  lines.push(' * ')
+  lines.push(' * // 完整的 IDE 智能提示')
+  lines.push(' * const { data, error } = await api.users.find.post({ current: 1, pageSize: 10 })')
+  lines.push(' * ```')
+  lines.push(' */')
+  lines.push('export function createApiClient(client: Client): ApiClient {')
+  lines.push('  return eden<Api>(client) as unknown as ApiClient')
+  lines.push('}')
+  lines.push('')
+  
   return lines.join('\n')
+}
+
+/**
+ * 生成客户端接口类型（带完整方法签名，IDE 友好）
+ */
+function generateClientType(tree: Map<string, RouteTreeNode>, indent: number): string {
+  const lines: string[] = []
+  const pad = '  '.repeat(indent)
+  
+  for (const [key, node] of tree) {
+    const needsQuotes = /[^a-zA-Z0-9_$]/.test(key) || /^\d/.test(key)
+    const propName = needsQuotes ? `'${key}'` : key
+    lines.push(`${pad}${propName}: {`)
+    
+    // 添加方法签名
+    for (const [method, route] of node.methods) {
+      if (route.description) {
+        lines.push(`${pad}  /** ${route.description} */`)
+      }
+      
+      const methodSig = generateMethodSignature(route, method)
+      lines.push(`${pad}  ${method}: ${methodSig}`)
+    }
+    
+    // 递归处理子节点
+    if (node.children.size > 0) {
+      const childContent = generateClientType(node.children, indent + 1)
+      if (childContent) {
+        lines.push(childContent)
+      }
+    }
+    
+    lines.push(`${pad}}`)
+  }
+  
+  return lines.join('\n')
+}
+
+/**
+ * 生成方法签名（函数类型）
+ */
+function generateMethodSignature(route: RouteContract, method: string): string {
+  const params: string[] = []
+  
+  // body 参数（POST/PUT/PATCH/DELETE）
+  if (route.schema?.body) {
+    const bodyType = schemaToType(route.schema.body)
+    params.push(`body: ${bodyType}`)
+  }
+  
+  // query 参数（GET）
+  if (route.schema?.query) {
+    const queryType = schemaToType(route.schema.query)
+    params.push(`query?: ${queryType}`)
+  }
+  
+  // config 参数（可选）
+  params.push('config?: RequestConfig')
+  
+  // 返回类型
+  const returnType = route.schema?.response 
+    ? schemaToType(route.schema.response)
+    : 'any'
+  
+  return `(${params.join(', ')}) => Promise<ApiResponse<${returnType}>>`
 }
 
 interface RouteTreeNode {
@@ -111,11 +216,28 @@ interface RouteTreeNode {
 /**
  * 构建路由树
  */
-function buildRouteTree(routes: RouteContract[]): Map<string, RouteTreeNode> {
+function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<string, RouteTreeNode> {
   const root = new Map<string, RouteTreeNode>()
   
+  // 规范化前缀（确保以 / 开头，不以 / 结尾）
+  const normalizedPrefix = stripPrefix
+    ? '/' + stripPrefix.replace(/^\/+|\/+$/g, '')
+    : undefined
+  
   for (const route of routes) {
-    const segments = route.path.split('/').filter(Boolean)
+    // 去掉前缀
+    let path = route.path
+    if (normalizedPrefix && path.startsWith(normalizedPrefix)) {
+      path = path.slice(normalizedPrefix.length) || '/'
+    }
+    
+    const segments = path.split('/').filter(Boolean)
+    
+    // 如果去掉前缀后没有路径段，跳过（通常是根路径）
+    if (segments.length === 0) {
+      continue
+    }
+    
     let current = root
     
     for (let i = 0; i < segments.length; i++) {
@@ -208,8 +330,15 @@ function generateMethodType(route: RouteContract): string {
     parts.push(`params: ${paramsType}`)
   }
   
-  // return 类型（契约中没有返回类型信息，使用 unknown）
-  parts.push('return: unknown')
+  // return 类型：优先使用 response schema，否则使用 any（渐进式类型安全）
+  if (route.schema?.response) {
+    const responseType = schemaToType(route.schema.response)
+    parts.push(`return: ${responseType}`)
+  } else {
+    // 使用 any 而非 unknown，方便渐进式迁移
+    // 用户可以先完成迁移，再逐步添加 response schema 获得完整类型安全
+    parts.push('return: any')
+  }
   
   if (parts.length === 1) {
     return `{ ${parts[0]} }`
