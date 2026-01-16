@@ -93,6 +93,17 @@ function arrayToType(schema: JSONSchema): string {
  * 对象类型转换
  */
 function objectToType(schema: JSONSchema): string {
+  // 处理 patternProperties（TypeBox 的 Type.Record 生成）
+  const patternProps = schema.patternProperties as Record<string, JSONSchema> | undefined
+  if (patternProps) {
+    const patterns = Object.values(patternProps)
+    if (patterns.length > 0 && patterns[0]) {
+      const valueType = schemaToType(patterns[0])
+      return `Record<string, ${valueType}>`
+    }
+    return 'Record<string, unknown>'
+  }
+
   if (!schema.properties) {
     // 无属性的对象
     if (schema.additionalProperties === true) {
@@ -102,7 +113,8 @@ function objectToType(schema: JSONSchema): string {
       const valueType = schemaToType(schema.additionalProperties)
       return `Record<string, ${valueType}>`
     }
-    return '{}'
+    // 空对象使用 Record 避免 lint 错误
+    return 'Record<string, unknown>'
   }
   
   const required = new Set(schema.required || [])
@@ -115,7 +127,7 @@ function objectToType(schema: JSONSchema): string {
   }
   
   if (props.length === 0) {
-    return '{}'
+    return 'Record<string, unknown>'
   }
   
   return `{ ${props.join('; ')} }`

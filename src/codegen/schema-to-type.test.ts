@@ -36,7 +36,7 @@ describe('schemaToType', () => {
 
   describe('对象类型', () => {
     it('空对象', () => {
-      expect(schemaToType({ type: 'object' })).toBe('{}')
+      expect(schemaToType({ type: 'object' })).toBe('Record<string, unknown>')
     })
 
     it('简单对象', () => {

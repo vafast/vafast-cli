@@ -153,12 +153,10 @@ function generateRouteTreeType(tree: Map<string, RouteTreeNode>, indent: number)
   const pad = '  '.repeat(indent)
   
   for (const [key, node] of tree) {
-    // 处理动态参数
-    if (key === ':id') {
-      lines.push(`${pad}':id': {`)
-    } else {
-      lines.push(`${pad}${key}: {`)
-    }
+    // 判断属性名是否需要引号（包含特殊字符或以数字开头）
+    const needsQuotes = /[^a-zA-Z0-9_$]/.test(key) || /^\d/.test(key)
+    const propName = needsQuotes ? `'${key}'` : key
+    lines.push(`${pad}${propName}: {`)
     
     // 添加方法
     for (const [method, route] of node.methods) {
