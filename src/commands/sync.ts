@@ -97,7 +97,7 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push('')
   
   // 导入类型
-  lines.push('import type { ApiResponse, RequestConfig, Client } from \'@vafast/api-client\'')
+  lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient } from \'@vafast/api-client\'')
   lines.push('import { eden } from \'@vafast/api-client\'')
   lines.push('')
   
@@ -118,6 +118,11 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push('}')
   lines.push('')
   
+  // 生成类型别名（使用 EdenClient 推断，提供完整类型安全）
+  lines.push('/** API 客户端类型别名（基于 EdenClient 推断，提供完整类型检查） */')
+  lines.push('export type ApiClientType = EdenClient<Api>')
+  lines.push('')
+  
   // 生成工厂函数
   lines.push('/**')
   lines.push(' * 创建类型安全的 API 客户端')
@@ -130,12 +135,14 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push(' * const client = createClient(\'/api\').use(authMiddleware)')
   lines.push(' * const api = createApiClient(client)')
   lines.push(' * ')
-  lines.push(' * // 完整的 IDE 智能提示')
+  lines.push(' * // 完整的 IDE 智能提示和类型检查')
   lines.push(' * const { data, error } = await api.users.find.post({ current: 1, pageSize: 10 })')
+  lines.push(' * // ❌ 错误路径会被 TypeScript 检测到')
+  lines.push(' * // api.nonExistent.post() // Error: Property \'nonExistent\' does not exist')
   lines.push(' * ```')
   lines.push(' */')
-  lines.push('export function createApiClient(client: Client): ApiClient {')
-  lines.push('  return eden<Api>(client) as unknown as ApiClient')
+  lines.push('export function createApiClient(client: Client): EdenClient<Api> {')
+  lines.push('  return eden<Api>(client)')
   lines.push('}')
   lines.push('')
   
