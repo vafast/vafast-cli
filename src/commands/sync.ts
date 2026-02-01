@@ -20,6 +20,8 @@ interface RouteContract {
   path: string
   name?: string
   description?: string
+  /** 是否为 SSE 端点 */
+  sse?: boolean
   schema?: {
     body?: unknown
     query?: unknown
@@ -97,8 +99,20 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push('')
   
   // 导入类型
-  lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient } from \'@vafast/api-client\'')
+  lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient, SSESubscription, SSESubscribeOptions } from \'@vafast/api-client\'')
   lines.push('import { eden } from \'@vafast/api-client\'')
+  lines.push('')
+  
+  // SSE 回调接口
+  lines.push('/** SSE 回调接口 */')
+  lines.push('interface SSECallbacks<T> {')
+  lines.push('  onMessage: (data: T) => void')
+  lines.push('  onError?: (error: { code: number; message: string }) => void')
+  lines.push('  onOpen?: () => void')
+  lines.push('  onClose?: () => void')
+  lines.push('  onReconnect?: (attempt: number, maxAttempts: number) => void')
+  lines.push('  onMaxReconnects?: () => void')
+  lines.push('}')
   lines.push('')
   
   // 构建路由树
@@ -191,6 +205,25 @@ function generateClientType(tree: Map<string, RouteTreeNode>, indent: number): s
 function generateMethodSignature(route: RouteContract, method: string): string {
   const params: string[] = []
   
+  // 返回类型
+  const returnType = route.schema?.response 
+    ? schemaToType(route.schema.response)
+    : 'any'
+  
+  // SSE 方法签名与普通 HTTP 方法不同
+  if (route.sse) {
+    // SSE 方法：(query?, callbacks, options?) => SSESubscription
+    if (route.schema?.query) {
+      const queryType = schemaToType(route.schema.query)
+      params.push(`query: ${queryType}`)
+    }
+    params.push(`callbacks: SSECallbacks<${returnType}>`)
+    params.push('options?: SSESubscribeOptions')
+    
+    return `(${params.join(', ')}) => SSESubscription<${returnType}>`
+  }
+  
+  // 普通 HTTP 方法
   // body 参数（POST/PUT/PATCH/DELETE）
   if (route.schema?.body) {
     const bodyType = schemaToType(route.schema.body)
@@ -205,11 +238,6 @@ function generateMethodSignature(route: RouteContract, method: string): string {
   
   // config 参数（可选）
   params.push('config?: RequestConfig')
-  
-  // 返回类型
-  const returnType = route.schema?.response 
-    ? schemaToType(route.schema.response)
-    : 'any'
   
   return `(${params.join(', ')}) => Promise<ApiResponse<${returnType}>>`
 }
@@ -264,7 +292,9 @@ function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<stri
       
       // 最后一段，添加方法
       if (i === segments.length - 1) {
-        node.methods.set(route.method.toLowerCase(), route)
+        // SSE 端点使用 'sse' 作为方法名，普通路由使用 HTTP method
+        const methodName = route.sse ? 'sse' : route.method.toLowerCase()
+        node.methods.set(methodName, route)
       }
       
       current = node.children
@@ -325,8 +355,8 @@ function generateMethodType(route: RouteContract): string {
     parts.push(`query: ${queryType}`)
   }
   
-  // body 类型
-  if (route.schema?.body) {
+  // body 类型（SSE 端点不需要 body）
+  if (route.schema?.body && !route.sse) {
     const bodyType = schemaToType(route.schema.body)
     parts.push(`body: ${bodyType}`)
   }

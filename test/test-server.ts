@@ -2,7 +2,7 @@
  * 使用真正的 vafast 框架进行完整测试
  */
 
-import { Server, defineRoute, defineRoutes, Type, serve, getApiSpec } from 'vafast'
+import { Server, defineRoute, defineRoutes, Type, serve, getApiSpec, createSSEHandler } from 'vafast'
 
 // 定义路由
 const routeDefinitions = [
@@ -98,23 +98,78 @@ const routeDefinitions = [
       status: query.status ?? 'all',
     })
   }),
+
+  // SSE 端点：实时聊天流
+  defineRoute({
+    method: 'GET',
+    path: '/chat/stream',
+    name: 'chat_stream',
+    description: 'AI 聊天流式响应（SSE）',
+    schema: {
+      query: Type.Object({
+        prompt: Type.String(),
+      }),
+      response: Type.Object({
+        text: Type.String(),
+        done: Type.Boolean(),
+      }),
+    },
+    handler: createSSEHandler(
+      {
+        query: Type.Object({
+          prompt: Type.String(),
+        }),
+      },
+      async function* ({ query }) {
+        yield { data: { text: `Processing: ${query.prompt}`, done: false } }
+        yield { data: { text: 'Thinking...', done: false } }
+        yield { data: { text: 'Done!', done: true } }
+      }
+    ),
+  }),
+
+  // SSE 端点：任务进度（带动态参数）
+  defineRoute({
+    method: 'GET',
+    path: '/tasks/:id/progress',
+    name: 'task_progress',
+    description: '获取任务进度（SSE）',
+    schema: {
+      params: Type.Object({
+        id: Type.String(),
+      }),
+      response: Type.Object({
+        progress: Type.Number(),
+        status: Type.String(),
+      }),
+    },
+    handler: createSSEHandler(
+      {
+        params: Type.Object({
+          id: Type.String(),
+        }),
+      },
+      async function* ({ params }) {
+        yield { data: { progress: 0, status: `Task ${params.id} started` } }
+        yield { data: { progress: 50, status: 'Processing...' } }
+        yield { data: { progress: 100, status: 'Completed' } }
+      }
+    ),
+  }),
 ] as const
 
-// 转换为运行时路由
-const routes = defineRoutes(routeDefinitions)
-
-// 添加 API Spec 接口（使用无参调用，自动从全局 Registry 获取）
-const allRoutes = [
-  ...routes,
-  {
-    method: 'GET' as const,
+// 转换为运行时路由（包含 api-spec）
+const routes = defineRoutes([
+  ...routeDefinitions,
+  defineRoute({
+    method: 'GET',
     path: '/api-spec',
-    handler: getApiSpec,  // 直接作为 handler，最简洁
-  }
-]
+    handler: () => getApiSpec(),  // 包装调用，无参获取契约
+  }),
+])
 
 // 创建服务器
-const server = new Server(allRoutes)
+const server = new Server(routes)
 
 // 启动
 serve({ fetch: server.fetch, port: 3456 }, () => {
