@@ -88,6 +88,9 @@ export async function syncTypes(options: SyncOptions): Promise<void> {
 function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): string {
   const lines: string[] = []
   
+  // 检查是否有 SSE 路由
+  const hasSSE = contract.routes.some(route => route.sse)
+  
   // 文件头
   lines.push('/**')
   lines.push(' * 自动生成的 API 类型定义')
@@ -98,22 +101,28 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push(' */')
   lines.push('')
   
-  // 导入类型
-  lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient, SSESubscription, SSESubscribeOptions } from \'@vafast/api-client\'')
+  // 导入类型（根据是否有 SSE 路由决定导入哪些类型）
+  if (hasSSE) {
+    lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient, SSESubscription, SSESubscribeOptions } from \'@vafast/api-client\'')
+  } else {
+    lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient } from \'@vafast/api-client\'')
+  }
   lines.push('import { eden } from \'@vafast/api-client\'')
   lines.push('')
   
-  // SSE 回调接口
-  lines.push('/** SSE 回调接口 */')
-  lines.push('interface SSECallbacks<T> {')
-  lines.push('  onMessage: (data: T) => void')
-  lines.push('  onError?: (error: { code: number; message: string }) => void')
-  lines.push('  onOpen?: () => void')
-  lines.push('  onClose?: () => void')
-  lines.push('  onReconnect?: (attempt: number, maxAttempts: number) => void')
-  lines.push('  onMaxReconnects?: () => void')
-  lines.push('}')
-  lines.push('')
+  // SSE 回调接口（仅在有 SSE 路由时生成）
+  if (hasSSE) {
+    lines.push('/** SSE 回调接口 */')
+    lines.push('interface SSECallbacks<T> {')
+    lines.push('  onMessage: (data: T) => void')
+    lines.push('  onError?: (error: { code: number; message: string }) => void')
+    lines.push('  onOpen?: () => void')
+    lines.push('  onClose?: () => void')
+    lines.push('  onReconnect?: (attempt: number, maxAttempts: number) => void')
+    lines.push('  onMaxReconnects?: () => void')
+    lines.push('}')
+    lines.push('')
+  }
   
   // 构建路由树
   const routeTree = buildRouteTree(contract.routes, stripPrefix)
