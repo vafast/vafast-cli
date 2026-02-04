@@ -2,7 +2,7 @@
  * 使用真正的 vafast 框架进行完整测试
  */
 
-import { Server, defineRoute, defineRoutes, Type, serve, getApiSpec, createSSEHandler } from 'vafast'
+import { Server, defineRoute, defineRoutes, Type, serve, getApiSpec } from 'vafast'
 
 // 定义路由
 const routeDefinitions = [
@@ -99,11 +99,12 @@ const routeDefinitions = [
     })
   }),
 
-  // SSE 端点：实时聊天流
+  // SSE 端点：实时聊天流（GET SSE with query）
   defineRoute({
     method: 'GET',
     path: '/chat/stream',
     name: 'chat_stream',
+    sse: true,
     description: 'AI 聊天流式响应（SSE）',
     schema: {
       query: Type.Object({
@@ -114,25 +115,19 @@ const routeDefinitions = [
         done: Type.Boolean(),
       }),
     },
-    handler: createSSEHandler(
-      {
-        query: Type.Object({
-          prompt: Type.String(),
-        }),
-      },
-      async function* ({ query }) {
-        yield { data: { text: `Processing: ${query.prompt}`, done: false } }
-        yield { data: { text: 'Thinking...', done: false } }
-        yield { data: { text: 'Done!', done: true } }
-      }
-    ),
+    handler: async function* ({ query }) {
+      yield { data: { text: `Processing: ${query.prompt}`, done: false } }
+      yield { data: { text: 'Thinking...', done: false } }
+      yield { data: { text: 'Done!', done: true } }
+    },
   }),
 
-  // SSE 端点：任务进度（带动态参数）
+  // SSE 端点：任务进度（GET SSE with params）
   defineRoute({
     method: 'GET',
     path: '/tasks/:id/progress',
     name: 'task_progress',
+    sse: true,
     description: '获取任务进度（SSE）',
     schema: {
       params: Type.Object({
@@ -143,18 +138,39 @@ const routeDefinitions = [
         status: Type.String(),
       }),
     },
-    handler: createSSEHandler(
-      {
-        params: Type.Object({
-          id: Type.String(),
-        }),
-      },
-      async function* ({ params }) {
-        yield { data: { progress: 0, status: `Task ${params.id} started` } }
-        yield { data: { progress: 50, status: 'Processing...' } }
-        yield { data: { progress: 100, status: 'Completed' } }
-      }
-    ),
+    handler: async function* ({ params }) {
+      yield { data: { progress: 0, status: `Task ${params.id} started` } }
+      yield { data: { progress: 50, status: 'Processing...' } }
+      yield { data: { progress: 100, status: 'Completed' } }
+    },
+  }),
+
+  // POST SSE 端点：AI 对话（带 body）
+  defineRoute({
+    method: 'POST',
+    path: '/ai/chat',
+    name: 'ai_chat',
+    sse: true,
+    description: 'AI 对话流式响应（POST SSE with body）',
+    schema: {
+      body: Type.Object({
+        messages: Type.Array(Type.Object({
+          role: Type.String(),
+          content: Type.String(),
+        })),
+        model: Type.Optional(Type.String()),
+      }),
+      response: Type.Object({
+        content: Type.String(),
+        done: Type.Boolean(),
+      }),
+    },
+    handler: async function* ({ body }) {
+      const lastMessage = body.messages[body.messages.length - 1]?.content || ''
+      yield { data: { content: `收到: ${lastMessage}`, done: false } }
+      yield { data: { content: '处理中...', done: false } }
+      yield { data: { content: '完成!', done: true } }
+    },
   }),
 ] as const
 

@@ -8,14 +8,14 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { schemaToType } from '../codegen/schema-to-type'
 
-interface SyncOptions {
+export interface SyncOptions {
   url: string
   output: string
   endpoint: string
   stripPrefix?: string
 }
 
-interface RouteContract {
+export interface RouteContract {
   method: string
   path: string
   name?: string
@@ -30,7 +30,7 @@ interface RouteContract {
   }
 }
 
-interface ApiContract {
+export interface ApiContract {
   version: string
   generatedAt: string
   routes: RouteContract[]
@@ -85,11 +85,8 @@ export async function syncTypes(options: SyncOptions): Promise<void> {
 /**
  * 生成类型定义文件内容
  */
-function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): string {
+export function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): string {
   const lines: string[] = []
-
-  // 检查是否有 SSE 路由
-  const hasSSE = contract.routes.some(route => route.sse)
 
   // 文件头
   lines.push('/**')
@@ -101,28 +98,11 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
   lines.push(' */')
   lines.push('')
 
-  // 导入类型（根据是否有 SSE 路由决定导入哪些类型）
-  if (hasSSE) {
-    lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient, SSESubscription, SSESubscribeOptions } from \'@vafast/api-client\'')
-  } else {
-    lines.push('import type { ApiResponse, RequestConfig, Client, EdenClient } from \'@vafast/api-client\'')
-  }
+  // 导入类型
+  // RequestBuilder 用于所有 HTTP 方法（支持 await 或 .sse() 链式调用）
+  lines.push('import type { RequestConfig, Client, EdenClient, RequestBuilder } from \'@vafast/api-client\'')
   lines.push('import { eden } from \'@vafast/api-client\'')
   lines.push('')
-
-  // SSE 回调接口（仅在有 SSE 路由时生成）
-  if (hasSSE) {
-    lines.push('/** SSE 回调接口 */')
-    lines.push('interface SSECallbacks<T> {')
-    lines.push('  onMessage: (data: T) => void')
-    lines.push('  onError?: (error: { code: number; message: string }) => void')
-    lines.push('  onOpen?: () => void')
-    lines.push('  onClose?: () => void')
-    lines.push('  onReconnect?: (attempt: number, maxAttempts: number) => void')
-    lines.push('  onMaxReconnects?: () => void')
-    lines.push('}')
-    lines.push('')
-  }
 
   // 构建路由树
   const routeTree = buildRouteTree(contract.routes, stripPrefix)
@@ -175,7 +155,7 @@ function generateTypeDefinition(contract: ApiContract, stripPrefix?: string): st
 /**
  * 生成客户端接口类型（带完整方法签名，IDE 友好）
  */
-function generateClientType(tree: Map<string, RouteTreeNode>, indent: number): string {
+export function generateClientType(tree: Map<string, RouteTreeNode>, indent: number): string {
   const lines: string[] = []
   const pad = '  '.repeat(indent)
 
@@ -211,7 +191,7 @@ function generateClientType(tree: Map<string, RouteTreeNode>, indent: number): s
 /**
  * 生成方法签名（函数类型）
  */
-function generateMethodSignature(route: RouteContract, method: string): string {
+export function generateMethodSignature(route: RouteContract, method: string): string {
   const params: string[] = []
 
   // 返回类型
@@ -219,18 +199,9 @@ function generateMethodSignature(route: RouteContract, method: string): string {
     ? schemaToType(route.schema.response)
     : 'any'
 
-  // SSE 方法签名与普通 HTTP 方法不同
-  if (route.sse) {
-    // SSE 方法：(query?, callbacks, options?) => SSESubscription
-    if (route.schema?.query) {
-      const queryType = schemaToType(route.schema.query)
-      params.push(`query: ${queryType}`)
-    }
-    params.push(`callbacks: SSECallbacks<${returnType}>`)
-    params.push('options?: SSESubscribeOptions')
-
-    return `(${params.join(', ')}) => SSESubscription<${returnType}>`
-  }
+  // SSE 端点：使用链式调用 .method().sse()
+  // SSE 端点生成普通 HTTP 方法签名，返回 RequestBuilder（支持 .sse()）
+  // 不再生成独立的 SSE 签名
 
   // 普通 HTTP 方法
   // body 参数（POST/PUT/PATCH/DELETE）
@@ -248,10 +219,11 @@ function generateMethodSignature(route: RouteContract, method: string): string {
   // config 参数（可选）
   params.push('config?: RequestConfig')
 
-  return `(${params.join(', ')}) => Promise<ApiResponse<${returnType}>>`
+  // 返回 RequestBuilder（支持 await 或 .sse() 链式调用）
+  return `(${params.join(', ')}) => RequestBuilder<${returnType}>`
 }
 
-interface RouteTreeNode {
+export interface RouteTreeNode {
   methods: Map<string, RouteContract>
   children: Map<string, RouteTreeNode>
   isDynamic: boolean
@@ -260,7 +232,7 @@ interface RouteTreeNode {
 /**
  * 构建路由树
  */
-function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<string, RouteTreeNode> {
+export function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<string, RouteTreeNode> {
   const root = new Map<string, RouteTreeNode>()
 
   // 规范化前缀（确保以 / 开头，不以 / 结尾）
@@ -301,8 +273,8 @@ function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<stri
 
       // 最后一段，添加方法
       if (i === segments.length - 1) {
-        // SSE 端点使用 'sse' 作为方法名，普通路由使用 HTTP method
-        const methodName = route.sse ? 'sse' : route.method.toLowerCase()
+        // SSE 端点使用实际的 HTTP method（链式调用：.post().sse()）
+        const methodName = route.method.toLowerCase()
         node.methods.set(methodName, route)
       }
 
@@ -316,7 +288,7 @@ function buildRouteTree(routes: RouteContract[], stripPrefix?: string): Map<stri
 /**
  * 生成路由树的类型定义
  */
-function generateRouteTreeType(tree: Map<string, RouteTreeNode>, indent: number): string {
+export function generateRouteTreeType(tree: Map<string, RouteTreeNode>, indent: number): string {
   const lines: string[] = []
   const pad = '  '.repeat(indent)
 
@@ -355,7 +327,7 @@ function generateRouteTreeType(tree: Map<string, RouteTreeNode>, indent: number)
 /**
  * 生成方法类型
  */
-function generateMethodType(route: RouteContract): string {
+export function generateMethodType(route: RouteContract): string {
   const parts: string[] = []
 
   // query 类型
@@ -364,8 +336,8 @@ function generateMethodType(route: RouteContract): string {
     parts.push(`query: ${queryType}`)
   }
 
-  // body 类型（SSE 端点不需要 body）
-  if (route.schema?.body && !route.sse) {
+  // body 类型（SSE 端点也支持 body）
+  if (route.schema?.body) {
     const bodyType = schemaToType(route.schema.body)
     parts.push(`body: ${bodyType}`)
   }
