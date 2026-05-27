@@ -440,7 +440,7 @@ describe('sync 命令', () => {
   })
 
   describe('generateTypeDefinition - 完整类型定义生成', () => {
-    it('无 SSE 路由不生成 SSECallbacks', () => {
+    it('无 SSE 路由不生成 SSE 样板类型', () => {
       const contract: ApiContract = {
         version: '1.0.0',
         generatedAt: '2026-01-01T00:00:00.000Z',
@@ -453,6 +453,11 @@ describe('sync 命令', () => {
       // 无 SSE 路由时也使用 RequestBuilder（所有方法都返回 RequestBuilder）
       expect(content).toContain('RequestBuilder')
       expect(content).toContain("import type { RequestConfig, Client, EdenClient, RequestBuilder } from '@vafast/api-client'")
+      // 旧版生成器会写入以下未使用符号，导致 noUnusedLocals 构建失败
+      expect(content).not.toContain('SSESubscription')
+      expect(content).not.toContain('SSESubscribeOptions')
+      expect(content).not.toContain('SSECallbacks')
+      expect(content).not.toContain('ApiResponse')
     })
 
     it('有 SSE 路由使用 RequestBuilder 链式调用', () => {
@@ -470,6 +475,9 @@ describe('sync 命令', () => {
       expect(content).toContain('RequestBuilder')
       expect(content).toContain("import type { RequestConfig, Client, EdenClient, RequestBuilder } from '@vafast/api-client'")
       // 不再生成独立的 SSECallbacks 接口（从 @vafast/api-client 导出）
+      expect(content).not.toContain('SSESubscription')
+      expect(content).not.toContain('SSESubscribeOptions')
+      expect(content).not.toContain('interface SSECallbacks')
     })
 
     it('生成 Api 类型', () => {

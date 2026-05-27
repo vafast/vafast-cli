@@ -135,10 +135,10 @@ const { data, error } = await api.users.get({ page: 1 })
 }
 ```
 
-生成的类型：
+生成的类型（`>=0.2.0`：无 SSE 路由时不生成 `SSECallbacks` / `SSESubscription` 等未使用样板）：
 
 ```typescript
-import type { ApiResponse, RequestConfig, Client, EdenClient } from '@vafast/api-client'
+import type { RequestConfig, Client, EdenClient, RequestBuilder } from '@vafast/api-client'
 import { eden } from '@vafast/api-client'
 
 /** API 契约类型 */
@@ -155,12 +155,16 @@ export type Api = {
   }
 }
 
-/** API 客户端类型别名 */
+/** API 客户端类型（IDE 智能提示） */
+export interface ApiClient {
+  users: {
+    get: (query?: { page?: number }, config?: RequestConfig) => RequestBuilder<any>
+    post: (body: { name?: string }, config?: RequestConfig) => RequestBuilder<any>
+  }
+}
+
 export type ApiClientType = EdenClient<Api>
 
-/**
- * 创建类型安全的 API 客户端
- */
 export function createApiClient(client: Client): EdenClient<Api> {
   return eden<Api>(client)
 }
@@ -181,13 +185,15 @@ const { data, error } = await api.users.post({ name: 'John' })
 
 ## 注意事项
 
-1. **返回类型**：如果后端未定义 `response` schema，生成的返回类型为 `any`（渐进式类型安全）。建议后端添加 `response` schema 获得完整类型检查。
+1. **CLI 版本**：请使用 `@vafast/cli@^0.2.1`。`0.1.x` 会在无 SSE 的 API 中生成未使用的 `SSECallbacks` / `SSESubscription`，在 `noUnusedLocals` 下导致 `vue-tsc` 失败。
 
-2. **服务器必须运行**：执行 `sync` 命令时，服务端必须在运行并暴露契约接口。
+2. **返回类型**：如果后端未定义 `response` schema，生成的返回类型为 `any`（渐进式类型安全）。建议后端添加 `response` schema 获得完整类型检查。
 
-3. **不要手动修改**：生成的文件会被覆盖，请勿手动修改。
+3. **服务器必须运行**：执行 `sync` 命令时，服务端必须在运行并暴露契约接口。
 
-4. **类型安全**：生成的 `createApiClient` 返回 `EdenClient<Api>`，TypeScript 会检测错误的 API 路径。
+4. **不要手动修改**：生成的文件会被覆盖，请勿手动修改。
+
+5. **类型安全**：生成的 `createApiClient` 返回 `EdenClient<Api>`，TypeScript 会检测错误的 API 路径。SSE 端点通过 `RequestBuilder` 链式调用（如 `api.chat.stream.get().sse({ onMessage })`），不再在生成文件中内联 `SSECallbacks`。
 
 ## License
 
