@@ -189,6 +189,21 @@ export function generateClientType(tree: Map<string, RouteTreeNode>, indent: num
 }
 
 /**
+ * body schema 是否无必填字段（调用方可省略 body 参数）
+ */
+function isBodyParamOptional(bodySchema: unknown): boolean {
+  if (!bodySchema || typeof bodySchema !== 'object') {
+    return false
+  }
+  const schema = bodySchema as { type?: string; properties?: Record<string, unknown>; required?: string[] }
+  if (schema.type !== 'object' && !schema.properties) {
+    return false
+  }
+  const required = schema.required
+  return !Array.isArray(required) || required.length === 0
+}
+
+/**
  * 生成方法签名（函数类型）
  */
 export function generateMethodSignature(route: RouteContract, method: string): string {
@@ -207,7 +222,8 @@ export function generateMethodSignature(route: RouteContract, method: string): s
   // body 参数（POST/PUT/PATCH/DELETE）
   if (route.schema?.body) {
     const bodyType = schemaToType(route.schema.body)
-    params.push(`body: ${bodyType}`)
+    const bodyOptional = isBodyParamOptional(route.schema.body)
+    params.push(bodyOptional ? `body?: ${bodyType}` : `body: ${bodyType}`)
   }
 
   // query 参数（GET）

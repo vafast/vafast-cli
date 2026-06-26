@@ -134,6 +134,20 @@ describe('schemaToType', () => {
       const schema = { type: 'array' }
       expect(schemaToType(schema)).toBe('unknown[]')
     })
+
+    it('联合类型元素数组（须加括号）', () => {
+      const schema = {
+        type: 'array',
+        items: {
+          anyOf: [
+            { const: 'text' },
+            { const: 'image' },
+            { const: 'mesh_3d' },
+          ],
+        },
+      }
+      expect(schemaToType(schema)).toBe('("text" | "image" | "mesh_3d")[]')
+    })
   })
 
   describe('联合类型', () => {

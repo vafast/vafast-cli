@@ -59,6 +59,21 @@ describe('sync 命令', () => {
         expect(sig).toBe('(body: { name: string }, config?: RequestConfig) => RequestBuilder<any>')
       })
 
+      it('POST 请求 - body 全部可选时可省略参数', () => {
+        const route: RouteContract = {
+          method: 'POST',
+          path: '/summary',
+          schema: {
+            body: {
+              type: 'object',
+              properties: { subjectUserId: { type: 'string' } },
+            },
+          },
+        }
+        const sig = generateMethodSignature(route, 'post')
+        expect(sig).toBe('(body?: { subjectUserId?: string }, config?: RequestConfig) => RequestBuilder<any>')
+      })
+
       it('POST 请求 - 带 body 和 response', () => {
         const route: RouteContract = {
           method: 'POST',

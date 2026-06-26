@@ -84,7 +84,9 @@ export function schemaToType(schema: unknown): string {
 function arrayToType(schema: JSONSchema): string {
   if (schema.items) {
     const itemType = schemaToType(schema.items)
-    return `${itemType}[]`
+    // 联合/交叉元素须加括号，否则 `A | B[]` 会被解析为 `A | (B[])`
+    const needsParens = itemType.includes(' | ') || itemType.includes(' & ')
+    return needsParens ? `(${itemType})[]` : `${itemType}[]`
   }
   return 'unknown[]'
 }
